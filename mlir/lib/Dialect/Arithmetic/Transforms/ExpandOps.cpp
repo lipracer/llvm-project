@@ -13,6 +13,47 @@ using namespace mlir;
 
 namespace {
 
+/// Expands CeilDivUIOp (n, m) into
+///  ((n-1) / m) + 1
+/// divu(n, m) + (remu(n, m) & 0x00...001)
+struct CeilDivUIOpConverter : public OpRewritePattern<arith::CeilDivUIOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(arith::CeilDivUIOp op,
+                                PatternRewriter &rewriter) const final {
+#if 0
+    Location loc = op.getLoc();
+    Value n = op.lhs();
+    Value m = op.rhs();
+    Value quotient = rewriter.create<arith::DivUIOp>(loc, n, m);
+    Value remainder = rewriter.create<arith::RemUIOp>(loc, n, m);
+    Value zero = rewriter.create<arith::ConstantOp>(
+        loc, rewriter.getIntegerAttr(remainder.getType(), 0));
+    Value compare = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq, remainder, zero);
+    Value one = rewriter.create<arith::ConstantOp>(
+        loc, rewriter.getIntegerAttr(remainder.getType(), 1));
+    Value plusOne = rewriter.create<arith::AddIOp>(loc, quotient, one);
+    Value res = rewriter.create<SelectOp>(loc, compare, quotient, plusOne);
+#else
+    Location loc = op.getLoc();
+    Value a = op.lhs();
+    Value b = op.rhs();
+    Value zero = rewriter.create<arith::ConstantOp>(
+        loc, rewriter.getIntegerAttr(a.getType(), 0));
+    Value compare =
+        rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, a, zero);
+    Value one = rewriter.create<arith::ConstantOp>(
+        loc, rewriter.getIntegerAttr(a.getType(), 1));
+    Value minusOne = rewriter.create<arith::SubIOp>(loc, a, one);
+    Value quotient = rewriter.create<arith::DivUIOp>(loc, minusOne, b);
+    Value plusOne = rewriter.create<arith::AddIOp>(loc, quotient, one);
+    Value res = rewriter.create<SelectOp>(loc, compare, zero, plusOne);
+#endif
+    rewriter.replaceOp(op, {res});
+    return success();
+  }
+};
+
 /// Expands CeilDivSIOp (n, m) into
 ///   1) x = (m > 0) ? -1 : 1
 ///   2) (n*m>0) ? ((n+x) / m) + 1 : - (-n / m)
@@ -64,6 +105,17 @@ struct CeilDivSIOpConverter : public OpRewritePattern<arith::CeilDivSIOp> {
         rewriter.create<arith::OrIOp>(loc, firstTerm, secondTerm);
     Value res = rewriter.create<SelectOp>(loc, compareRes, posRes, negRes);
     // Perform substitution and return success.
+    rewriter.replaceOp(op, {res});
+    return success();
+  }
+};
+
+struct FloorDivUIOpConverter : public OpRewritePattern<arith::FloorDivUIOp> {
+  using OpRewritePattern::OpRewritePattern;
+  LogicalResult matchAndRewrite(arith::FloorDivUIOp op,
+                                PatternRewriter &rewriter) const final {
+    Location loc = op.getLoc();
+    Value res = rewriter.create<arith::DivUIOp>(loc, op.lhs(), op.rhs());
     rewriter.replaceOp(op, {res});
     return success();
   }
@@ -132,7 +184,8 @@ struct ArithmeticExpandOpsPass
     arith::populateArithmeticExpandOpsPatterns(patterns);
 
     target.addLegalDialect<arith::ArithmeticDialect, StandardOpsDialect>();
-    target.addIllegalOp<arith::CeilDivSIOp, arith::FloorDivSIOp>();
+    target.addIllegalOp<arith::CeilDivUIOp, arith::CeilDivSIOp,
+                        arith::FloorDivUIOp, arith::FloorDivSIOp>();
 
     if (failed(
             applyPartialConversion(getFunction(), target, std::move(patterns))))
@@ -144,7 +197,8 @@ struct ArithmeticExpandOpsPass
 
 void mlir::arith::populateArithmeticExpandOpsPatterns(
     RewritePatternSet &patterns) {
-  patterns.add<CeilDivSIOpConverter, FloorDivSIOpConverter>(
+  patterns.add<CeilDivUIOpConverter, CeilDivSIOpConverter,
+               FloorDivUIOpConverter, FloorDivSIOpConverter>(
       patterns.getContext());
 }
 

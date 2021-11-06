@@ -277,6 +277,27 @@ def Arith_DivSIOp : Arith_IntBinaryOp<"divsi"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CeilDivUIOp
+//===----------------------------------------------------------------------===//
+
+def Arith_CeilDivUIOp : Arith_IntBinaryOp<"ceildivui"> {
+  let summary = "unsigned ceil integer division operation";
+  let description = [{
+    unsigned integer division. Rounds towards positive infinity, i.e. `7 / 2 = 4`.
+
+    Note: the semantics of division by zero is TBD; do NOT assume any specific behavior.
+
+    Example:
+
+    ```mlir
+    // Scalar unsigned integer division.
+    %a = arith.ceildivui %b, %c : i64
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // CeilDivSIOp
 //===----------------------------------------------------------------------===//
 
@@ -293,6 +314,28 @@ def Arith_CeilDivSIOp : Arith_IntBinaryOp<"ceildivsi"> {
     ```mlir
     // Scalar signed integer division.
     %a = arith.ceildivsi %b, %c : i64
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// FloorDivUIOp
+//===----------------------------------------------------------------------===//
+
+def Arith_FloorDivUIOp : Arith_IntBinaryOp<"floordivui"> {
+  let summary = "unsigned floor integer division operation";
+  let description = [{
+    unsigned integer division. Rounds towards negative infinity, i.e. `5 / 2 = 2`.
+
+    Note: the semantics of division by zero is TBD; do NOT assume any specific behavior.
+
+    Example:
+
+    ```mlir
+    // Scalar unsigned integer division.
+    %a = arith.floordivui %b, %c : i64
+
     ```
   }];
   let hasFolder = 1;

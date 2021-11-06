@@ -242,10 +242,11 @@ OpFoldResult arith::MulIOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
-// DivUIOp
+// unsigned division and floor division folding helpers
 //===----------------------------------------------------------------------===//
 
-OpFoldResult arith::DivUIOp::fold(ArrayRef<Attribute> operands) {
+static inline OpFoldResult divUIFold(ArrayRef<Attribute> operands, Value lhs,
+                                     Value rhs) {
   // Don't fold if it would require a division by zero.
   bool div0 = false;
   auto result = constFoldBinaryOp<IntegerAttr>(operands, [&](APInt a, APInt b) {
@@ -258,14 +259,21 @@ OpFoldResult arith::DivUIOp::fold(ArrayRef<Attribute> operands) {
 
   // Fold out division by one. Assumes all tensors of all ones are splats.
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
-    if (rhs.getValue() == 1)
-      return getLhs();
+    if (rhs.getValue() == 1) return lhs;
   } else if (auto rhs = operands[1].dyn_cast_or_null<SplatElementsAttr>()) {
-    if (rhs.getSplatValue<IntegerAttr>().getValue() == 1)
-      return getLhs();
+    if (rhs.getSplatValue<IntegerAttr>().getValue() == 1) return lhs;
   }
 
   return div0 ? Attribute() : result;
+}
+
+//===----------------------------------------------------------------------===//
+// DivUIOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::DivUIOp::fold(ArrayRef<Attribute> operands) {
+  // Don't fold if it would require a division by zero.
+  return divUIFold(operands, getLhs(), getRhs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -307,6 +315,37 @@ static APInt signedCeilNonnegInputs(APInt a, APInt b, bool &overflow) {
 }
 
 //===----------------------------------------------------------------------===//
+// CeilDivUIOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::CeilDivUIOp::fold(ArrayRef<Attribute> operands) {
+  bool overflowOrDiv0 = false;
+  auto result = constFoldBinaryOp<IntegerAttr>(operands, [&](APInt a, APInt b) {
+    if (overflowOrDiv0 || !b) {
+      overflowOrDiv0 = true;
+      return a;
+    }
+    APInt quotient = a.udiv(b);
+    if (!a.urem(b)) {
+      return quotient;
+    }
+    APInt one(a.getBitWidth(), 1, true);
+    return quotient.uadd_ov(one, overflowOrDiv0);
+  });
+  // Fold out ceil division by one. Assumes all tensors of all ones are
+  // splats.
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    if (rhs.getValue() == 1)
+      return getLhs();
+  } else if (auto rhs = operands[1].dyn_cast_or_null<SplatElementsAttr>()) {
+    if (rhs.getSplatValue<IntegerAttr>().getValue() == 1)
+      return getLhs();
+  }
+
+  return overflowOrDiv0 ? Attribute() : result;
+}
+
+//===----------------------------------------------------------------------===//
 // CeilDivSIOp
 //===----------------------------------------------------------------------===//
 
@@ -342,7 +381,7 @@ OpFoldResult arith::CeilDivSIOp::fold(ArrayRef<Attribute> operands) {
     return zero.ssub_ov(div, overflowOrDiv0);
   });
 
-  // Fold out floor division by one. Assumes all tensors of all ones are
+  // Fold out ceil division by one. Assumes all tensors of all ones are
   // splats.
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     if (rhs.getValue() == 1)
@@ -353,6 +392,14 @@ OpFoldResult arith::CeilDivSIOp::fold(ArrayRef<Attribute> operands) {
   }
 
   return overflowOrDiv0 ? Attribute() : result;
+}
+
+//===----------------------------------------------------------------------===//
+// FloorDivUIOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult arith::FloorDivUIOp::fold(ArrayRef<Attribute> operands) {
+  return divUIFold(operands, getLhs(), getRhs());
 }
 
 //===----------------------------------------------------------------------===//
