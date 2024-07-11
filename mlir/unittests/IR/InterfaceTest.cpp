@@ -109,7 +109,7 @@ TEST(OperationInterfaceTest, CastOpToInterface) {
 
   bool constantOp =
       llvm::TypeSwitch<OpAsmOpInterface, bool>(interface)
-          .Case<VectorUnrollOpInterface, arith::ConstantOp>([&](auto op) {
+          .Case<arith::AddIOp, arith::ConstantOp>([&](auto op) {
             return std::is_same_v<decltype(op), arith::ConstantOp>;
           });
 

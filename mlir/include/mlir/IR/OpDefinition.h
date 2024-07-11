@@ -2171,6 +2171,51 @@ struct CastInfo<
   }
 };
 
+template <typename OpT, typename = void>
+struct is_concrete_op_type : public std::false_type {};
+
+template <typename OpT, template <typename T> typename... Traits>
+constexpr auto get_trait(std::tuple<Traits<OpT>...>) {
+  return mlir::Op<OpT, Traits...>(nullptr);
+}
+
+template <typename OpT>
+using trait_type = decltype(get_trait<OpT>(OpT::traits()));
+
+template <typename OpT>
+struct is_concrete_op_type<
+    OpT, std::enable_if_t<std::is_base_of_v<OpT, trait_type<OpT>>>>
+    : public std::true_type {};
+
+template <typename To, typename From>
+struct CastInfo<
+    To, From,
+    std::enable_if_t<
+        is_concrete_op_type<To>() &&
+            std::is_base_of_v<mlir::OpInterface<std::remove_const_t<From>,
+                                                typename std::remove_const_t<
+                                                    From>::InterfaceTraits>,
+                              std::remove_const_t<From>>,
+        void>> : 
+                 DefaultDoCastIfPossible<To, From, CastInfo<To, From>> {
+
+  static bool isPossible(From &val) {
+    if constexpr (std::is_same_v<To, From>)
+      return true;
+    else
+      return mlir::OpInterface<To, typename To::InterfaceTraits>::
+          InterfaceBase::classof(
+              const_cast<std::remove_const_t<From> &>(val).getOperation());
+  }
+
+  static To doCast(From &val) {
+    return To(const_cast<std::remove_const_t<From> &>(val).getOperation());
+  }
+  static To castFailed() {
+  	return To(nullptr);
+  }
+};
+
 } // namespace llvm
 
 #endif
