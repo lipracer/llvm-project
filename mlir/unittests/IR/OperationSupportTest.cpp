@@ -14,6 +14,8 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "gtest/gtest.h"
+#include "mlir/Dialect/Tosa/IR/TosaOps.h"
+#include "mlir/Parser/Parser.h"
 
 using namespace mlir;
 using namespace mlir::detail;
@@ -355,6 +357,25 @@ TEST(OperationEquivalenceTest, HashWorksWithFlags) {
             getHash(opWithProperty2, OperationEquivalence::None));
   opWithProperty1->destroy();
   opWithProperty2->destroy();
+}
+
+constexpr char ir[] = R"(
+func.func @test_unary_f32(%arg0 : tensor<4xf32>) -> () {
+  %2 = tosa.clamp %arg0 { min_val = 0.0 : f32, max_val = 10.0 : f32 } : (tensor<4xf32>) -> tensor<*xf32>
+  return
+  }
+)";
+
+TEST(OperationAttribueTest, getRawDictionaryAttrs) {
+  MLIRContext context;
+  context.getOrLoadDialect<tosa::TosaDialect>();
+  context.getOrLoadDialect<func::FuncDialect>();
+  auto module =
+      mlir::parseSourceString<mlir::ModuleOp>(ir, mlir::ParserConfig{&context});
+  auto clampOp =
+      &module->getBodyRegion().front().front().getRegion(0).front().front();
+  clampOp->dump();
+  llvm::errs() << clampOp->getRawDictionaryAttrs() << "\n";
 }
 
 } // namespace
